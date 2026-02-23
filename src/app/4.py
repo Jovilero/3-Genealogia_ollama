@@ -14,20 +14,18 @@ A) API (gpt-4o-mini) por chunks como TEXTO (no re-sube nada).
 B) Local (regex): CREATE TABLE / columnas / PK / FK → outdir/analysis_local.md
 """
 
-import os, re, time
-from openai import OpenAI
+import os, re, time, requests
 
 # ========================
-# CONFIGURACIÓN
+# CONFIGURACIÓN OLLAMA
 # ========================
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+DEFAULT_MODEL = "qwen2.5-coder:14b"
 SQL_FILE = "/mnt/a/3-Ocio/4-Programacion/1-RepositoriosGIT/2-Genealogia_gpt_api/data/arxv_DB.txt"
 OUTDIR   = "/mnt/a/3-Ocio/4-Programacion/1-RepositoriosGIT/2-Genealogia_gpt_api/data/output"
 
-MODEL         = "gpt-4o-mini"
 CHUNK_CHARS   = 200_000   # caracteres por chunk
 RESUME_LOCAL  = True      # saltar chunks que ya existen en OUTDIR
-USE_REMOTE_PROGRESS = True  # leer tus 'sql_chunk_###.txt' subidos a OpenAI para saber por qué índice vamos
-REMOTE_PREFIX = "sql_chunk_" # patrón de nombre remoto
 # ========================
 
 MAX_RETRIES = 3
@@ -83,7 +81,7 @@ def write_local_markdown(schema: dict, path: str):
         f.write("".join(md))
 
 # ---------------------------
-# API (texto)
+# API: enviar chunk como texto
 # ---------------------------
 def build_prompt(chunk_text: str, idx: int):
     return (
@@ -97,15 +95,19 @@ def build_prompt(chunk_text: str, idx: int):
         f"--- FRAGMENTO #{idx} ---\n```sql\n{chunk_text}\n```"
     )
 
-def call_openai_chunk_text(client: OpenAI, model: str, prompt: str):
+def call_ollama_chunk_text(model, prompt: str):
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False
+    }
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            resp = client.responses.create(
-                model=model,
-                input=[{"role": "user", "content": prompt}]
-            )
-            return resp.output_text
-        except Exception:
+            response = requests.post(OLLAMA_URL, json=payload, timeout=300)
+            response.raise_for_status()
+            return response.json().get("response", "")
+        except Exception as e:
+            print(f"⚠️ Intento {attempt} fallido: {e}")
             if attempt == MAX_RETRIES:
                 raise
             time.sleep(SLEEP_BASE * attempt)
@@ -124,27 +126,6 @@ def detect_completed_chunks_local(outdir: str):
             done.add(int(m.group(1)))
     return done
 
-def highest_remote_chunk_index(prefix="sql_chunk_"):
-    """
-    Mira en OpenAI Files los ficheros cuyo filename empieza por 'sql_chunk_' y
-    devuelve el mayor índice detectado (int). Si no hay,  -1.
-    """
-    try:
-        client = OpenAI()
-        files = client.files.list()
-        max_idx = -1
-        for f in files.data:
-            fname = (f.filename or "").lower().strip()
-            if fname.startswith(prefix):
-                m = re.match(rf"{re.escape(prefix)}(\d+)\.txt$", fname)
-                if m:
-                    idx = int(m.group(1))
-                    if idx > max_idx:
-                        max_idx = idx
-        return max_idx
-    except Exception:
-        return -1
-
 def skip_chars_for_chunks(fh, chunks_to_skip: int, chunk_size: int):
     """Avanza el puntero del fichero saltando 'chunks_to_skip' trozos."""
     for _ in range(chunks_to_skip):
@@ -155,54 +136,49 @@ def skip_chars_for_chunks(fh, chunks_to_skip: int, chunk_size: int):
 # ---------------------------
 def main():
     os.makedirs(OUTDIR, exist_ok=True)
-    client = OpenAI()
-    print(f"\n📤 Conexion con api")
+    # client = OpenAI()
+    print(f"\n📤 Conexion con Ollama local")
+    
     # ===========
-    # Calcular desde qué índice reanudar
+    # Calcular desde qué índice reanudar (Local only)
     # ===========
     local_done = detect_completed_chunks_local(OUTDIR) if RESUME_LOCAL else set()
     max_local = max(local_done) if local_done else 0
 
-    max_remote = 0
-    if USE_REMOTE_PROGRESS:
-        hr = highest_remote_chunk_index(prefix=REMOTE_PREFIX)
-        max_remote = hr + 1 if hr >= 0 else 0  # si remoto = 26, empezaríamos desde 27
-    print(f"📡 Último chunk REMOTO detectado en OpenAI: {max_remote-1 if max_remote else 'ninguno'}")
-    start_index = max(max_local + 1, max_remote + 1)  # siguiente a lo ya visto
+    start_index = max_local + 1  # siguiente a lo ya visto
     if start_index < 1:
         start_index = 1
 
     print(f"\n📌 Reanudación:")
     print(f"   - Último chunk LOCAL procesado: {max_local if max_local else 'ninguno'}")
-    print(f"   - Último chunk REMOTO visto   : {(max_remote-1) if max_remote else 'ninguno'}")
     print(f"   ➜ Empezaremos desde el chunk  : {start_index:03d}")
 
     api_index_path = os.path.join(OUTDIR, "api_index.tsv")
     combined_path = os.path.join(OUTDIR, "analysis_api_combined.txt")
 
     # ===========
-    # API (por chunks de TEXTO)
+    # OLLAMA (por chunks de TEXTO)
     # ===========
-    print(f"\n📤 Enviando por chunks (TEXTO) a la API: {SQL_FILE}")
+    print(f"\n🤖 Enviando por chunks (TEXTO) a Ollama: {SQL_FILE}")
     idx = 1
     with open(SQL_FILE, "r", encoding="utf-8", errors="ignore") as f_in:
-        # saltar lo ya cubierto por local/remote
+        # saltar lo ya cubierto
         if start_index > 1:
             skip_chars_for_chunks(f_in, start_index - 1, CHUNK_CHARS)
             idx = start_index
 
         buffer = f_in.read(CHUNK_CHARS)
         while buffer:
-            # Si por algún motivo ya existe localmente (carrera), saltar
+            # Si ya existe localmente, saltar
             if RESUME_LOCAL and os.path.exists(os.path.join(OUTDIR, f"api_chunk_{idx:03d}.txt")):
                 print(f"⏭️  Chunk {idx:03d} ya existe (local), salto.")
                 idx += 1
                 buffer = f_in.read(CHUNK_CHARS)
                 continue
 
-            print(f"🤖 Analizando chunk {idx:03d} (len={len(buffer):,} chars) con {MODEL}…")
+            print(f"🤖 Analizando chunk {idx:03d} (len={len(buffer):,} chars) con {DEFAULT_MODEL}…")
             prompt = build_prompt(buffer, idx)
-            out_text = call_openai_chunk_text(client, MODEL, prompt)
+            out_text = call_ollama_chunk_text(DEFAULT_MODEL, prompt)
 
             chunk_out = os.path.join(OUTDIR, f"api_chunk_{idx:03d}.txt")
             with open(chunk_out, "w", encoding="utf-8") as w:

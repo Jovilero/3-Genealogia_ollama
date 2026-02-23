@@ -18,13 +18,14 @@ Uso:
   python main.py --sql /ruta/arxv_DB.txt --outdir ./data/output --resume
 """
 
-import argparse, os, re, time
-from openai import OpenAI
+import argparse, os, re, time, requests
 
-# Tamaño de chunk en caracteres (texto). Ajusta según tu caso.
+# Configuración Ollama
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+DEFAULT_MODEL = "qwen2.5-coder:14b"
 DEFAULT_CHUNK_CHARS = 200_000
 MAX_RETRIES = 3
-SLEEP_BASE = 2  # backoff base
+SLEEP_BASE = 2
 
 # ---------------------------
 # LOCAL: análisis de esquema con regex
@@ -91,15 +92,19 @@ def build_prompt(chunk_text: str, idx: int):
         f"--- FRAGMENTO #{idx} ---\n```sql\n{chunk_text}\n```"
     )
 
-def call_openai_chunk_text(client: OpenAI, model: str, prompt: str):
+def call_ollama_chunk_text(model, prompt: str):
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False
+    }
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            resp = client.responses.create(
-                model=model,
-                input=[{"role": "user", "content": prompt}]
-            )
-            return resp.output_text
+            response = requests.post(OLLAMA_URL, json=payload, timeout=300)
+            response.raise_for_status()
+            return response.json().get("response", "")
         except Exception as e:
+            print(f"⚠️ Intento {attempt} fallido: {e}")
             if attempt == MAX_RETRIES:
                 raise
             time.sleep(SLEEP_BASE * attempt)
@@ -136,7 +141,7 @@ def main():
     args = ap.parse_args()
 
     ensure_outdir(args.outdir)
-    client = OpenAI()
+    # client = OpenAI()  # Eliminado para Ollama
 
     # ===========
     # Carga archivo en streaming para no romper RAM
@@ -163,7 +168,7 @@ def main():
 
             print(f"🤖 Analizando chunk {idx:03d} (len={len(buffer):,} chars) con {args.model}…")
             prompt = build_prompt(buffer, idx)
-            out_text = call_openai_chunk_text(client, args.model, prompt)
+            out_text = call_ollama_chunk_text(args.model, prompt)
 
             # guardar salida de chunk
             chunk_out = os.path.join(args.outdir, f"api_chunk_{idx:03d}.txt")

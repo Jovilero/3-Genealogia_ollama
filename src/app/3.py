@@ -10,15 +10,15 @@ B) Local (regex): analiza CREATE TABLE, columnas, PK/FK → guarda un Markdown.
 Configura las rutas y parámetros en las variables al inicio.
 """
 
-import os, re, time
-from openai import OpenAI
+import os, re, time, requests
 
 # ========================
-# CONFIGURACIÓN
+# CONFIGURACIÓN OLLAMA
 # ========================
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+DEFAULT_MODEL = "qwen2.5-coder:14b"
 SQL_FILE = "/mnt/a/3-Ocio/4-Programacion/1-RepositoriosGIT/2-Genealogia_gpt_api/data/arxv_DB.txt"
 OUTDIR   = "/mnt/a/3-Ocio/4-Programacion/1-RepositoriosGIT/2-Genealogia_gpt_api/data/output"
-MODEL    = "gpt-4o-mini"
 CHUNK_CHARS = 200_000   # caracteres por chunk
 RESUME   = True         # reanudar si hay chunks ya procesados
 # ========================
@@ -90,15 +90,19 @@ def build_prompt(chunk_text: str, idx: int):
         f"--- FRAGMENTO #{idx} ---\n```sql\n{chunk_text}\n```"
     )
 
-def call_openai_chunk_text(client: OpenAI, model: str, prompt: str):
+def call_ollama_chunk_text(model, prompt: str):
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False
+    }
     for attempt in range(1, MAX_RETRIES + 1):
         try:
-            resp = client.responses.create(
-                model=model,
-                input=[{"role": "user", "content": prompt}]
-            )
-            return resp.output_text
-        except Exception:
+            response = requests.post(OLLAMA_URL, json=payload, timeout=300)
+            response.raise_for_status()
+            return response.json().get("response", "")
+        except Exception as e:
+            print(f"⚠️ Intento {attempt} fallido: {e}")
             if attempt == MAX_RETRIES:
                 raise
             time.sleep(SLEEP_BASE * attempt)
@@ -121,7 +125,7 @@ def detect_completed_chunks(outdir: str):
 # ---------------------------
 def main():
     os.makedirs(OUTDIR, exist_ok=True)
-    client = OpenAI()
+    # client = OpenAI()
 
     # ===========
     # API (chunks)
@@ -144,9 +148,9 @@ def main():
                 buffer = f_in.read(CHUNK_CHARS)
                 continue
 
-            print(f"🤖 Analizando chunk {idx:03d} (len={len(buffer):,} chars) con {MODEL}…")
+            print(f"🤖 Analizando chunk {idx:03d} (len={len(buffer):,} chars) con {DEFAULT_MODEL}…")
             prompt = build_prompt(buffer, idx)
-            out_text = call_openai_chunk_text(client, MODEL, prompt)
+            out_text = call_ollama_chunk_text(DEFAULT_MODEL, prompt)
 
             chunk_out = os.path.join(OUTDIR, f"api_chunk_{idx:03d}.txt")
             with open(chunk_out, "w", encoding="utf-8") as w:

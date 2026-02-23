@@ -1,0 +1,10 @@
+.env
+.venv/
+.venv_win/
+__pycache__/
+*.log
+data/output/
+*.txt
+!*.md
+**/data/original/
+**/src/data/

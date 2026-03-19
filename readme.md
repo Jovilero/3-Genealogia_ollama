@@ -1,43 +1,133 @@
-# Genealogia Ollama 🧬🤖
+# 🧬 Genealogia Ollama
 
-Este proyecto es una herramienta de análisis de bases de datos genealógicas (específicamente volcados SQL como `arxv_DB.txt`) diseñada para funcionar de forma **100% local**, garantizando la privacidad de los datos y eliminando costes de API externas.
+Analizador local inteligente de bases de datos genealógicas SQL utilizando LLMs locales via Ollama.
+
+## 🏗️ Arquitectura del Proyecto
+
+```mermaid
+graph TD
+    A[SQL Dump / data] --> B(genealogia.py CLI)
+    B --> C{Comandos}
+    C -->|run| D[SQLProcessor - Skeleton Generation]
+    D --> E[OllamaClient - Parallel Analysis]
+    C -->|status| F[Diagnostic Tool]
+    C -->|report| G[Executive Report Generator]
+    C -->|web| H[Streamlit UI]
+    C -->|chat| I[Interactive CLI Chat]
+    
+    E --> J[(data/output_optimized)]
+    F --> J
+    G --> J
+    H --> J
+    I --> J
+```
+
+## 🚀 Inicio Rápido
+
+### Requisitos
+- **Python 3.10+**
+- **Ollama** con el modelo `qwen3:30b` (u otro de tu preferencia).
+
+### Instalación
+1. Clona el repositorio.
+2. Crea un entorno virtual e instala las dependencias:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate  # En Windows: .venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+## 🛠️ Uso del CLI Unificado
+
+El comando principal es `genealogia.py`.
+
+| Comando | Descripción | Ejemplo |
+|---------|-------------|---------|
+| `run` | Inicia el análisis paralelo | `python genealogia.py run --sql db.sql --outdir output` |
+| `status` | Verifica progreso y huecos | `python genealogia.py status --outdir output [--json]` |
+| `web` | Lanza la interfaz Streamlit | `python genealogia.py web` |
+| `chat` | Chat interactivo en terminal | `python genealogia.py chat --outdir output` |
+| `report` | Genera informe final .md | `python genealogia.py report --outdir output` |
+
+## 🐳 Docker (Opcional)
+
+Puedes ejecutar la interfaz web mediante Docker:
+
+```bash
+docker-compose up --build
+```
+*Nota: Asegúrate de que Ollama sea accesible desde el contenedor (configurado por defecto como `host.docker.internal`).*
+
+## 🧪 Pruebas
+Ejecuta la suite de pruebas con:
+```bash
+python -m pytest
+```
+
+---
+*Desarrollado para la preservación y análisis de registros parroquiales históricos.*
 
 ## 🎯 Propósito del Proyecto
-El objetivo principal es procesar archivos SQL de gran tamaño para extraer y documentar su estructura (esquemas, relaciones y lógica de datos) utilizando un enfoque híbrido:
+El objetivo principal es procesar archivos SQL inmensos (1.3GB+) para extraer, documentar y permitir la consulta interactiva de su estructura y contenido. Emplea un enfoque híbrido de alta eficiencia:
 
-1.  **Análisis Local (Regex)**: Una extracción determinística y rápida de tablas, columnas, claves primarias y foráneas utilizando expresiones regulares.
-2.  **Análisis Inteligente (Ollama/AI)**: Uso del modelo local `qwen2.5-coder:14b` para explicar semánticamente el propósito de cada tabla y la lógica de las relaciones capturadas en los fragmentos SQL.
+1. **Smart Skeleton Filtering**: Extrae en segundos el esquema exacto mediante Regex y una pequeña muestra de datos representativa, descartando los millones de filas repetitivas.
+2. **Análisis Semántico Local**: El modelo de IA (`qwen3:30b` o similar vía Ollama) digiere el "skeleton" en paralelo para explicar la lógica profunda del modelo de datos histórico (siglos XVII-XVIII).
 
 ## 🚀 Características Principales
-- **Local-First**: Procesa todo en tu máquina usando Ollama.
-- **Sistema de Reanudación (Resume)**: Si el proceso se detiene, el script detecta automáticamente los archivos ya generados y continúa desde el último punto, ahorrando tiempo y cómputo.
-- **Escalabilidad**: Divide archivos gigantes en trozos (chunks) configurables para procesar Gbs de datos sin saturar la memoria.
-- **Trazabilidad**: Genera logs detallados en `process.log` para seguir el análisis.
+- **Zero-Cloud Architecture**: Todo el procesamiento se realiza en tu propia red local. Todos los datos, hasta el último byte, quedan en disco de forma segura.
+- **Rendimiento Extremo**: El procesamiento optimizado por skeleton y el cálculo multi-hilo reducen análisis que tomarían días a apenas minutos.
+- **Full Continuity (Resume)**: Sistema robusto que permite reiniciar y continuar tareas largas si son interrumpidas, conservando cada fragmento analizado.
+- **Consulta Conversacional**: Herramienta `query_db.py` mejorada que retiene el historial de charla y te permite hacer preguntas sobre la BD en lenguaje natural ("Who are the parents matching this criteria?").
 
 ## 🛠️ Requisitos
 - **Python 3.10+**
-- **Ollama** funcionando con el modelo `qwen2.5-coder:14b` (o cualquier otro modelo que especifiques).
-- Dependencias: `requests`
+- **Ollama** funcionando en red local (ej: modelo `qwen3:30b`).
+- Instalar dependencias:
+  ```bash
+  pip install -r requirements.txt
+  ```
 
-## 📋 Uso
-Instala las dependencias:
+## 📋 Uso del Pipeline (Nuevo CLI Unificado)
+
+El proyecto cuenta de una nueva herramienta `genealogia.py` que centraliza todas las operaciones. Puedes ver la ayuda en cualquier momento con `python genealogia.py -h`.
+
+### 1. Diagnóstico de Estado
+Verifica hasta dónde ha llegado el análisis:
 ```bash
-pip install requests
+python genealogia.py status --outdir ./data/output_optimized
 ```
 
-Ejecuta el análisis:
+### 2. Ejecutar el Análisis
+El script recomendado que usa el filtro de esqueleto.
 ```bash
-python src/main.py --sql path/to/your/db.sql --outdir ./data/output
+python genealogia.py run --sql path/to/your/db.sql --outdir ./data/output_optimized
 ```
 
-### Opciones adicionales:
-- `--chunk-size`: Cambia el tamaño de los trozos (por defecto 200,000 caracteres).
-- `--model`: Especifica un modelo de Ollama diferente.
-- `--no-resume`: Fuerza el análisis completo desde cero.
+### 3. Generar el Informe Consolidado
+Toma todos los miles de fragmentos (chunks) analizados y crea un resumen ejecutivo completo (`final_report.md`):
+```bash
+python genealogia.py report --outdir ./data/output_optimized
+```
 
-## 📁 Estructura de Salida
-En la carpeta de salida (outdir) encontrarás:
-- `analysis_local.md`: El esquema técnico puro extraído por Regex.
-- `analysis_ollama_combined.txt`: El análisis semántico completo generado por la IA.
-- `api_chunk_###.txt`: Los fragmentos individuales de la respuesta de la IA.
-- `process.log`: El registro de toda la ejecución.
+### 4. Consulta Interactiva (Terminal)
+Hazle preguntas al modelo sobre la base de datos ya analizada en modo texto.
+```bash
+python genealogia.py chat --outdir ./data/output_optimized --report
+```
+
+### 5. Interfaz Gráfica Web (¡NUEVO!)
+Abre un panel de control interactivo en tu navegador con pestañas para el Chat IA, el Esquema SQL y el Informe completo.
+```bash
+python genealogia.py web
+```
+
+## 📁 Principales Ficheros y Directorios
+- `genealogia.py`: **NUEVO** CLI unificado que orquesta la ejecución (run, chat, report, status).
+- `requirements.txt`: Dependencias del sistema.
+- `src/main_optimized.py`: Analizador inteligente principal con ThreadPoolExecutor.
+- `src/generate_report.py`: Script creador de `final_report.md`.
+- `src/query_db.py`: Prompt interactivo.
+- `src/check_status.py`: Monitor de integridad del análisis.
+- `data/output_optimized/`: Carpeta con los entregables finales (`analysis_local.md`, `database_documentation.md`, chunks de texto).
+
+*Revisa `0-antigravity/behavior_rules.md` para las políticas de resiliencia de procesos del proyecto.*

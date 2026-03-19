@@ -13,7 +13,7 @@ import requests
 # CONFIGURACIÓN OLLAMA
 # ========================
 OLLAMA_URL = "http://localhost:11434/api/generate"
-DEFAULT_MODEL = "qwen2.5-coder:14b"
+DEFAULT_MODEL = "qwen3:30b"
 CHUNK_CHARS = 200_000
 MAX_RETRIES = 3
 
@@ -31,7 +31,7 @@ def setup_logging(outdir: Path):
 
 def parse_schema_local(sql_text: str) -> Dict[str, Any]:
     """Extrae tablas/columnas/PK/FK de forma determinística usando regex."""
-    CREATE_RE = re.compile(r"CREATE\s+TABLE\s+[`\"]?(\w+)[`\"]?\s*\((.*?)\);", re.I | re.S)
+    CREATE_RE = re.compile(r"CREATE\s+TABLE\s+[`\"]?(\w+)[`\"]?\s*\((.*?)\)\s*;", re.I | re.S)
     COLUMN_RE = re.compile(r"^\s*[`\"]?(\w+)[`\"]?\s+([^\s,]+)", re.I)
     PK_TABLE_RE = re.compile(r"PRIMARY\s+KEY\s*\(([^)]+)\)", re.I)
     PK_INLINE_RE = re.compile(r"PRIMARY\s+KEY", re.I)

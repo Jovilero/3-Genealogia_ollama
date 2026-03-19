@@ -22,7 +22,7 @@ import argparse, os, re, time, requests
 
 # Configuración Ollama
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
-DEFAULT_MODEL = "qwen2.5-coder:14b"
+DEFAULT_MODEL = "qwen3:30b"
 DEFAULT_CHUNK_CHARS = 200_000
 MAX_RETRIES = 3
 SLEEP_BASE = 2

@@ -20,7 +20,7 @@ import os, re, time, requests
 # CONFIGURACIÓN OLLAMA
 # ========================
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
-DEFAULT_MODEL = "qwen2.5-coder:14b"
+DEFAULT_MODEL = "qwen3:30b"
 SQL_FILE = "/mnt/a/3-Ocio/4-Programacion/1-RepositoriosGIT/2-Genealogia_gpt_api/data/arxv_DB.txt"
 OUTDIR   = "/mnt/a/3-Ocio/4-Programacion/1-RepositoriosGIT/2-Genealogia_gpt_api/data/output"
 

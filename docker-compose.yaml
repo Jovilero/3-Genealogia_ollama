@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  genealogia:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - OLLAMA_HOST=host.docker.internal # To connect to Ollama running on Windows/Mac host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

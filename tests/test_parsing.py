@@ -30,5 +30,34 @@ def test_parse_schema_local_with_fk():
     assert fk["ref_table"] == "users"
     assert fk["ref_columns"] == ["id"]
 
+def test_parse_schema_local_composite_pk():
+    sql = """
+    CREATE TABLE link_table (
+        id_a INT,
+        id_b INT,
+        PRIMARY KEY (id_a, id_b)
+    );
+    """
+    schema = parse_schema_local(sql)
+    assert schema["link_table"]["primary_key"] == ["id_a", "id_b"]
+
+def test_parse_schema_local_inline_backticks():
+    sql = """
+    CREATE TABLE `orders` (
+        `order_id` INT PRIMARY KEY,
+        `status` VARCHAR(20)
+    );
+    """
+    schema = parse_schema_local(sql)
+    assert "orders" in schema
+    assert schema["orders"]["primary_key"] == ["order_id"]
+    assert schema["orders"]["columns"][1]["name"] == "status"
+
 def test_parse_schema_local_empty():
     assert parse_schema_local("") == {}
+
+def test_parse_schema_local_messy_whitespace():
+    sql = "\n\n  CREATE   TABLE   test   ( col1 INT   PRIMARY   KEY  )  ;  "
+    schema = parse_schema_local(sql)
+    assert "test" in schema
+    assert schema["test"]["primary_key"] == ["col1"]

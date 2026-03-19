@@ -8,3 +8,4 @@ data/output/
 !*.md
 **/data/original/
 **/src/data/
+backup/

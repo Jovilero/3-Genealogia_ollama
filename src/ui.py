@@ -10,6 +10,9 @@ from src.lib.ollama_client import OllamaClient
 from src.lib.sql_processor import SQLProcessor
 from src.lib.db_executor import DBExecutor
 import re
+import io
+import pandas as pd
+from backup_db import run_backup
 
 def load_text(path: Path) -> str:
     """Carga texto desde un archivo de forma segura."""
@@ -90,7 +93,7 @@ def main():
     
     st.title("🧬🤖 Genealogia Ollama")
     
-    tab_chat, tab_sql, tab_schema, tab_report = st.tabs(["💬 Autómata Histórico", "💻 Experto SQL", "📊 Grafo de Esquema", "📑 Informe Ejecutivo"])
+    tab_chat, tab_sql, tab_schema, tab_report, tab_admin = st.tabs(["💬 Autómata Histórico", "💻 Experto SQL", "📊 Grafo de Esquema", "📑 Informe Ejecutivo", "🛠️ Administración"])
     
     # Init session state para mensajeria
     if "messages" not in st.session_state:
@@ -211,7 +214,37 @@ def main():
                                                 
                                 st.dataframe(df, use_container_width=True)
                                 
+                                # --- Fase 16: Visualización Dinámica ---
+                                if not df.empty and len(df) > 1:
+                                    cols = df.columns.tolist()
+                                    date_cols = [c for c in cols if any(k in c.lower() for k in ["fecha", "ano", "año"])]
+                                    cat_cols = [c for c in cols if df[c].dtype == "object" and not any(k in c.lower() for k in ["fecha", "ano", "año", "notas"])]
+
+                                    v_col1, v_col2 = st.columns(2)
+                                    
+                                    # Visualización Temporal
+                                    with v_col1:
+                                        if date_cols:
+                                            d_col = date_cols[0]
+                                            st.subheader("📈 Tendencia Temporal")
+                                            # Limpiar fechas aproximadas (ej: 1750?) y agrupar
+                                            temp_df = df.copy()
+                                            temp_df[d_col] = temp_df[d_col].astype(str).str.extract(r"(\d{4})")
+                                            temp_df = temp_df.dropna(subset=[d_col])
+                                            if not temp_df.empty:
+                                                chart_data = temp_df.groupby(d_col).size()
+                                                st.line_chart(chart_data)
+                                    
+                                    # Visualización Categórica
+                                    with v_col2:
+                                        if cat_cols:
+                                            c_col = cat_cols[0]
+                                            st.subheader(f"📊 Top 10: {c_col}")
+                                            cat_counts = df[c_col].value_counts().head(10)
+                                            st.bar_chart(cat_counts)
+                                
                                 # --- Fase 12: Data Insights (Auto-Interpretación) ---
+
                                 if not df.empty and "Resultado" not in df.columns:
                                     with st.spinner("La IA está interpretando los datos resultantes..."):
                                         df_csv = df.head(10).to_csv(index=False)
@@ -219,14 +252,52 @@ def main():
                                             "Eres un historiador experto en registros parroquiales genealógicos. "
                                             "El usuario ha ejecutado una consulta SQL y ha obtenido los siguientes datos en formato CSV de la base de datos:\n\n"
                                             f"```csv\n{df_csv}\n```\n\n"
-                                            "Escribe un único párrafo corto (máximo 3 frases) explicando qué nos indican o revelan estos datos. Sé directo y profesional, no digas 'Aquí tienes los datos', simplemente analízalos."
+                                            "El sistema también ha generado gráficos automáticos de tendencia o distribución si los datos lo permitían. "
+                                            "Escribe un único párrafo corto (máximo 3 frases) analizando estos datos y mencionando posibles tendencias o patrones históricos que se observen. Sé directo y profesional."
                                         )
+
                                         insight_client = OllamaClient(model=model_input, num_ctx=num_ctx_input, temperature=0.7)
                                         insight_response = insight_client.call_generate(insight_context)
                                         
                                         st.info(f"💡 **Insight Histórico:**\n{insight_response}")
                                 
+                                # --- Fase 17: Exportación y Biografía ---
+                                if not df.empty:
+                                    st.divider()
+                                    e_col1, e_col2 = st.columns(2)
+                                    
+                                    with e_col1:
+                                        # Exportar a Excel
+                                        output = io.BytesIO()
+                                        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                                            df.to_excel(writer, index=False, sheet_name='Resultados')
+                                        st.download_button(
+                                            label="📥 Descargar Resultados (.xlsx)",
+                                            data=output.getvalue(),
+                                            file_name=f"consulta_{int(time.time())}.xlsx",
+                                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                        )
+
+                                    with e_col2:
+                                        # Generar Biografía (si hay Datos Personales)
+                                        if "nombre" in df.columns and "apellido1" in df.columns:
+                                            if st.button("✨ Generar Narrativa Biográfica (IA)"):
+                                                with st.spinner("La IA está redactando la historia de vida..."):
+                                                    # Tomamos la primera fila como sujeto
+                                                    sujeto = df.iloc[0].to_dict()
+                                                    bio_prompt = (
+                                                        "Eres un historiador novelista. A partir de estos datos técnicos de un registro genealógico, "
+                                                        "escribe un relato biográfico fluido y evocador (máximo 150 palabras) sobre la vida de esta persona. "
+                                                        "Incluye detalles de su profesión, familia y lugar si están disponibles.\n\n"
+                                                        f"DATOS: {sujeto}"
+                                                    )
+                                                    bio_client = OllamaClient(model=model_input, num_ctx=num_ctx_input, temperature=0.8)
+                                                    story = bio_client.call_generate(bio_prompt)
+                                                    st.write("📜 **Relato Biográfico:**")
+                                                    st.info(story)
+                                
                                 break # Éxito, salimos del bucle de auto-healing
+
                             else:
                                 st.info("ℹ️ No se detectó código SQL puro (bloque ```sql) en la respuesta.")
 
@@ -274,6 +345,33 @@ def main():
             st.warning("No se encontró el archivo `final_report.md`. Genera el informe (report) primero.")
         else:
             st.markdown(load_text(outdir / "final_report.md"))
+
+    # --- TAB: ADMIN ---
+    with tab_admin:
+        st.header("🛠️ Panel de Administración y Seguridad")
+        st.subheader("🏰 Bóveda de Backups")
+        
+        if st.button("🚀 Crear Copia de Seguridad Ahora"):
+            with st.spinner("Ejecutando pg_dump en el servidor..."):
+                success, result = run_backup()
+                if success:
+                    st.success(f"Archivo creado exitosamente: `{result}`")
+                else:
+                    st.error(f"Error en el backup: {result}")
+        
+        st.divider()
+        st.subheader("📂 Archivos de Resguardo Locales")
+        backup_dir = Path("backup")
+        if backup_dir.exists():
+            backups = sorted(list(backup_dir.glob("*.dump")), key=os.path.getmtime, reverse=True)
+            if backups:
+                for b in backups[:10]:
+                    size_mb = os.path.getsize(b) / (1024*1024)
+                    st.text(f"📄 {b.name} ({size_mb:.2f} MB)")
+            else:
+                st.info("No hay archivos de backup en la carpeta `/backup`.")
+        else:
+            st.info("Aún no se ha creado la carpeta de backups.")
 
 if __name__ == "__main__":
     main()

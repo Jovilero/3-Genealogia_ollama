@@ -7,6 +7,7 @@ def execute_query(sql: str) -> list[dict]:
     raise NotImplementedError("Database execution not implemented in this context.")
 
 import sys
+import argparse
 from pathlib import Path
 from lib.ollama_client import OllamaClient
 

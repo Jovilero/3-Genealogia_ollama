@@ -1,6 +1,6 @@
 # 🧬 Genealogia Ollama — Referencia Técnica del Proyecto
 
-> Generado: 2026-03-24 · Rama activa: `feat/ui-doc-sync-20260323`
+> Actualizado: 2026-03-24 · Rama activa: `main` (sincronizada con `origin/main`)
 
 ---
 
@@ -24,6 +24,9 @@ Analizador **local** e inteligente de bases de datos genealógicas SQL (archivos
 ├── Dockerfile / docker-compose.yaml
 ├── .env / .env.example        # Config de entorno
 ├── .gitignore
+├── .pre-commit-config.yaml    # Hooks: black, ruff, mypy
+├── .github/
+│   └── copilot-instructions.md  # Contexto automático para GitHub Copilot
 ├── backup_db.py               # Backup pg_dump
 ├── check_db_size.py
 ├── verify_db_copy.py
@@ -40,9 +43,10 @@ Analizador **local** e inteligente de bases de datos genealógicas SQL (archivos
 │   ├── resume_full_run.py     # Reanudación de procesos interrumpidos
 │   ├── detectar_extension.py  # Detección de tipo de archivo SQL (referencia canónica)
 │   └── lib/
-│       ├── ollama_client.py   # Cliente HTTP Ollama con caché y paralelismo
-│       ├── sql_processor.py   # Parser SQL + generador Mermaid ER
-│       └── db_executor.py     # Ejecutor SQL seguro sobre SQLAlchemy
+│       ├── ollama_client.py      # Cliente HTTP Ollama con caché y paralelismo
+│       ├── sql_processor.py      # Parser SQL + generador Mermaid ER
+│       ├── db_executor.py        # Ejecutor SQL seguro sobre SQLAlchemy
+│       └── cartography_bridge.py # Puente no destructivo con repo 6 (genealogia-cartografia-pro)
 │
 ├── tests/
 │   ├── test_critical_path.py  # Tests de DBExecutor, OllamaClient, Mermaid
@@ -172,25 +176,27 @@ python -m pytest tests/test_critical_path.py  # Solo ruta crítica
 
 | Rama | Commit | Notas |
 |---|---|---|
-| `feat/ui-doc-sync-20260323` (**HEAD**) | `ab0b239` | Rama de trabajo activa, sincronizada con `origin` |
-| `main` | `dca9575` | **2 commits adelante** de `origin/main` (NO pusheado) |
-| `safety/2026-03-23-precontinuidad` | `dca9575` | Snapshot de seguridad antes de la rama feature |
-| `origin/feat/ui-doc-sync-20260323` | `ab0b239` | Remote sincronizado |
-| `origin/main` | `cd52a99` | Remote desactualizado (2 commits atrás de local) |
+| `main` (**HEAD**) | `8ae5894` | Sincronizada 1:1 con `origin/main` ✅ |
+| `origin/main` | `8ae5894` | Sincronizada ✅ |
 
-> ⚠️ **`main` local está 2 commits ahead de `origin/main`** y nunca se pusheó. Hay que decidir si hacer push, merge o abandonar.
+> ✅ Repositorio limpio. Ramas `feat/ui-doc-sync-20260323` y `safety/2026-03-23-precontinuidad` eliminadas local y remotamente tras el merge.
 
-### Historial de Commits (todos)
+### Historial de Commits (HEAD → atrás)
 
 ```
-ab0b239  docs(sync): declarar detectar_extension como referencia canonica  [feat/ui-doc-sync HEAD]
+8ae5894  chore: add .pre-commit-config.yaml (black, ruff, mypy)          [main, origin/main]
+0a7d70e  feat: add .github/copilot-instructions.md for Copilot context
+dba1b39  feat: add cartography bridge to consume repo 6 CLI
+f702025  merge: integrar feat/ui-doc-sync-20260323 en main
+d4f22e3  docs: añadir project_reference.md como referencia técnica permanente
+ab0b239  docs(sync): declarar detectar_extension como referencia canonica
 0eed879  fix(query_db): añadir import argparse para comando chat
 6c907c2  docs: eliminar secciones duplicadas en README
 f23ef8a  docs: añadir worklog y auditoría 2026-03-23
 73b18de  feat(ui): actualizar interfaz Streamlit
-dca9575  feat: Phase 16 & 17 - Dynamic Visuals, Excel Export, AI Biographies  [main, safety]
+dca9575  feat: Phase 16 & 17 - Dynamic Visuals, Excel Export, AI Biographies
 debe519  feat: Phases 12-15 - Data Insights, DB Safeguards, Backups, Replica Verification
-cd52a99  Professionalization: pathlib, logging, resume logic, README  [origin/main]
+cd52a99  Professionalization: pathlib, logging, resume logic, README
 498c6b0  Alignment: Migrated legacy app/ scripts to local-first Ollama
 dc0f865  Initial commit - Clean Base (Sanitized)
 ```
@@ -219,12 +225,13 @@ dc0f865  Initial commit - Clean Base (Sanitized)
 
 ## 🚨 Pendientes / Deuda Técnica
 
-- [ ] **Push de `main` local** a `origin/main` (2 commits sin sincronizar desde Phases 12-17).
-- [ ] **Merge de `feat/ui-doc-sync-20260323` a `main`** y limpieza de la rama feature.
-- [ ] La rama `safety/2026-03-23-precontinuidad` puede borrarse tras confirmar el merge.
-- [ ] `src/main.py` vs `src/main_optimized.py`: hay dos analizadores. Evaluar si eliminar el legacy.
-- [ ] `test_critical_path.py` contiene CREATE/INSERT que el safeguard bloquearía en producción (solo funciona con `sqlite:///:memory:`).
-- [ ] `.env.example` menciona `OPENAI_API_KEY` que no se usa.
+- [x] ~~Push de `main` a `origin/main`~~ → ✅ Resuelto 2026-03-24
+- [x] ~~Merge de `feat/ui-doc-sync-20260323` a `main`~~ → ✅ Resuelto 2026-03-24
+- [x] ~~Limpiar rama `safety/2026-03-23-precontinuidad`~~ → ✅ Eliminada 2026-03-24
+- [ ] `src/main.py` vs `src/main_optimized.py`: dos analizadores. Evaluar si eliminar el legacy `main.py`.
+- [ ] `test_critical_path.py` contiene CREATE/INSERT que el safeguard bloquearía en producción (funciona solo con `sqlite:///:memory:`).
+- [ ] `.env.example` menciona `OPENAI_API_KEY` que actualmente no se usa — limpiar o documentar.
+- [ ] `cartography_bridge.py` depende de `genealogia_cartografia_pro` (repo 6) — verificar que ese paquete está instalado en el entorno.
 
 ---
 

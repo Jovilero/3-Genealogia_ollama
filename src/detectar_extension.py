@@ -6,6 +6,10 @@ Detecta el tipo de fichero sin extensión.
 - Comprueba cabeceras de texto
 - Intenta adivinar si es SQL (CREATE/INSERT)
 - Si está disponible, usa python-magic para tipo MIME real
+
+Nota de mantenimiento:
+- Este archivo actúa como referencia canónica para su copia homóloga en
+    2-Genealogia_gpt_api/src/detectar_extension.py.
 """
 
 import argparse

@@ -102,6 +102,8 @@ def main():
         st.session_state.sql_messages = []
     if "db_executor" not in st.session_state:
         st.session_state.db_executor = DBExecutor()
+    if "last_df" not in st.session_state:
+        st.session_state.last_df = None
 
     # --- TAB: CHAT HISTÓRICO ---
     with tab_chat:
@@ -206,6 +208,15 @@ def main():
                                 st.success("✅ Consulta ejecutada con éxito.")
                                 
                                 total_time = time.time() - start_total_time
+                                st.session_state.last_df = df
+                                st.session_state.last_metrics = {
+                                    "total_time": total_time,
+                                    "llm_time": llm_time,
+                                    "attempts": attempt,
+                                    "resp_len": len(response)
+                                }
+                                
+                                # Renderizado inmediato (se repite abajo para persistencia)
                                 with st.expander(f"📊 Métricas de Rendimiento ({model_input})"):
                                     st.markdown(f"- **⏱️ Tiempo Total Bucle:** `{total_time:.2f}s`\n"
                                                 f"- **🧠 Tiempo Inferencia LLM (Última):** `{llm_time:.2f}s`\n"
@@ -300,15 +311,13 @@ def main():
 
                             else:
                                 st.info("ℹ️ No se detectó código SQL puro (bloque ```sql) en la respuesta.")
-
                                 break
-
                                 
                         except Exception as e:
                             err_str = str(e)
                             if "Ollama" in err_str or "Max retries" in err_str:
                                 st.error(f"❌ Error conectando a la Inteligencia Artificial: {err_str}")
-                                break # Si falla la IA, no tiene sentido reintentar el auto-healing SQL
+                                break
                             
                             st.error(f"⚠️ Error en Base de Datos: {err_str}")
                             
@@ -319,6 +328,81 @@ def main():
                                 st.session_state.sql_messages.append({"role": "user", "content": current_prompt})
                             else:
                                 st.error("❌ Límite de auto-correcciones alcanzado. Verifica la consulta manualmente.")
+
+            # --- Bloque de Persistencia SQL (Fuera del Input) ---
+            if st.session_state.last_df is not None:
+                df = st.session_state.last_df
+                m = st.session_state.get("last_metrics", {})
+                
+                st.divider()
+                st.subheader("🔍 Resultados de la Consulta")
+                
+                with st.expander("📊 Métricas de Rendimiento"):
+                    st.markdown(f"- **⏱️ Tiempo Total:** `{m.get('total_time', 0):.2f}s` | **🧠 LLM:** `{m.get('llm_time', 0):.2f}s` | **🔁 Reintentos:** `{m.get('attempts', 0)}`")
+
+                st.dataframe(df, use_container_width=True)
+
+                # --- Fase 16: Visualización Dinámica ---
+                if not df.empty and len(df) > 1:
+                    cols = df.columns.tolist()
+                    date_cols = [c for c in cols if any(k in c.lower() for k in ["fecha", "ano", "año"])]
+                    cat_cols = [c for c in cols if df[c].dtype == "object" and not any(k in c.lower() for k in ["fecha", "ano", "año", "notas"])]
+                    
+                    if date_cols or cat_cols:
+                        v1, v2 = st.columns(2)
+                        with v1:
+                            if date_cols:
+                                d_col = date_cols[0]
+                                st.caption("📈 Evolución Temporal")
+                                try:
+                                    t_df = df.copy()
+                                    t_df[d_col] = t_df[d_col].astype(str).str.extract(r"(\d{4})")
+                                    t_df = t_df.dropna(subset=[d_col])
+                                    if not t_df.empty:
+                                        st.line_chart(t_df.groupby(d_col).size())
+                                except: pass
+                        with v2:
+                            if cat_cols:
+                                c_col = cat_cols[0]
+                                st.caption(f"📊 Distribución de {c_col}")
+                                st.bar_chart(df[c_col].value_counts().head(10))
+
+                # --- Fase 12: Data Insights (Auto-Interpretación) ---
+                if not df.empty and "Resultado" not in df.columns:
+                    # Usamos un botón para no re-ejecutar el insight pesado siempre
+                    if st.button("💡 Generar Análisis Histórico de estos datos"):
+                        with st.spinner("La IA está interpretando los datos resultantes..."):
+                            df_csv = df.head(10).to_csv(index=False)
+                            insight_context = (
+                                "Eres un historiador experto en registros parroquiales genealógicos. "
+                                "Analiza estos datos (CSV) y escribe un párrafo corto (3 frases) con patrones históricos.\n\n"
+                                f"```csv\n{df_csv}\n```"
+                            )
+                            insight_client = OllamaClient(model=model_input, num_ctx=num_ctx_input, temperature=0.7)
+                            st.info(insight_client.call_generate(insight_context))
+
+                # --- Fase 17: Exportación y Biografía ---
+                if not df.empty:
+                    e_col1, e_col2 = st.columns(2)
+                    with e_col1:
+                        excel_out = io.BytesIO()
+                        with pd.ExcelWriter(excel_out, engine='openpyxl') as writer:
+                            df.to_excel(writer, index=False, sheet_name='Resultados')
+                        st.download_button(
+                            label="📥 Descargar a Excel (.xlsx)",
+                            data=excel_out.getvalue(),
+                            file_name=f"genealogia_export_{int(time.time())}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="dl_xlsx"
+                        )
+                    with e_col2:
+                        if "nombre" in df.columns and "apellido1" in df.columns:
+                            if st.button("✨ Redactar Biografía Narrativa (IA)", key="gen_bio"):
+                                with st.spinner("La IA está escribiendo..."):
+                                    sujeto = df.iloc[0].to_dict()
+                                    bio_prompt = f"Eres un historiador. Escribe un relato biográfico (150 palabras) de esta persona del siglo XVIII usando estos datos: {sujeto}"
+                                    bio_client = OllamaClient(model=model_input, num_ctx=num_ctx_input, temperature=0.8)
+                                    st.info(bio_client.call_generate(bio_prompt))
 
     # --- TAB: SCHEMA ---
     with tab_schema:

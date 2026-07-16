@@ -1,0 +1,13 @@
+# Evita hornear secretos y datos pesados en la imagen (COPY . .)
+.env
+.env.*
+!.env.example
+*.dump
+backup/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+.venv/
+.venv_win/
+data/output/

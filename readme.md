@@ -1,3 +1,25 @@
+> # ⚠️ REPOSITORIO ARCHIVADO — no usar
+>
+> Toda esta funcionalidad se ha **portado a [`5-genealogia-reutilizable`](https://github.com/Jovilero/5-genealogia-reutilizable)**, que es el paquete canónico y el único que recibe mantenimiento.
+>
+> **Por qué:** este repo y `2-Genealogia_gpt_api` eran casi clones (el mismo pipeline cambiando OpenAI por Ollama). El paquete nuevo los unifica tras una interfaz de *provider* común, así que se elige el motor con una opción en vez de con un repositorio distinto.
+>
+> **Dónde está ahora cada cosa:**
+> | Aquí | En `5-genealogia-reutilizable` |
+> |---|---|
+> | `src/ui.py` (Streamlit) | `apps/streamlit_app.py` — extra `[ui]`, o `genealogia web` |
+> | `lib/sql_processor.py` (skeleton, Mermaid) | `preprocessing.generate_skeleton()`, `exporters.schema_to_mermaid()` |
+> | `lib/db_executor.py` | `db.DBExecutor` (solo lectura) — extra `[db]` |
+> | `backup_db.py` / `verify_db_copy.py` | `db.backup_db()` / `db.restore_to_copy()` |
+> | `check_status.py` / resume | `runner.get_status()` / `runner.checkpoint` |
+> | `generate_report.py` | `reporting.generate_report()` |
+> | `lib/ollama_client.py` | `providers.OllamaProvider` (con reintentos y caché) |
+> | `genealogia.py` | CLI `genealogia run / status / report / web` |
+>
+> Se conserva **solo como referencia histórica**. Su historial permanece intacto y el estado previo al archivado está etiquetado como `archivado-2026-07-19`.
+
+---
+
 # 🧬 Genealogia Ollama
 
 Analizador local inteligente de bases de datos genealógicas SQL utilizando LLMs locales via Ollama.
